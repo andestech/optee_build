@@ -548,7 +548,7 @@ OPTEE_OS_COMMON_FLAGS ?= \
 
 .PHONY: optee-os-common
 optee-os-common:
-	$(MAKE) -C $(OPTEE_OS_PATH) $(OPTEE_OS_COMMON_FLAGS)
+	$(MAKE) -C $(OPTEE_OS_PATH) $(OPTEE_OS_COMMON_FLAGS) -j $(nproc)
 
 .PHONY: optee-os-clean-common
 optee-os-clean-common:
