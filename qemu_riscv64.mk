@@ -151,13 +151,15 @@ optee-os-clean: optee-os-clean-common
 run: all
 	$(MAKE) run-only
 
-QEMU_SMP 	?= 1
+QEMU_SMP 	?= 2
 QEMU_MEM 	?= 2048
 QEMU_MACHINE	?= virt
+QEMU_DTB	?= -dtb qemu_rv64_virt_domain.dtb
 
 .PHONY: run-only
 run-only:
 	ln -sf $(ROOT)/out-br/images/rootfs.ext2 $(BINARIES_PATH)/
+	ln -sf $(ROOT)/qemu_rv64_virt_domain.dtb $(BINARIES_PATH)/
 	$(call check-terminal)
 	$(call run-help)
 	cd $(BINARIES_PATH) && $(QEMU_BUILD)/qemu-system-riscv64 \
@@ -169,6 +171,7 @@ run-only:
 		-m $(QEMU_MEM) \
 		-bios fw_jump.bin \
 		-kernel Image \
+		$(QEMU_DTB) \
 		-append "rootwait root=/dev/vda ro" \
 		-drive file=rootfs.ext2,format=raw,id=hd0 \
 		-device virtio-blk-device,drive=hd0 \
