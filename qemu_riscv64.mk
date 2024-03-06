@@ -34,7 +34,7 @@ WITH_CXX_TESTS			= n
 XEN_BOOT ?= n
 include common.mk
 
-DEBUG ?= 1
+DEBUG = 1
 
 ################################################################################
 # Paths to git projects and various binaries
@@ -71,7 +71,7 @@ include toolchain.mk
 OPENSBI_EXPORTS ?= \
 	CROSS_COMPILE="$(CCACHE)$(RISCV64_CROSS_COMPILE)"
 
-OPENSBI_FLAGS ?= PLATFORM=generic
+OPENSBI_FLAGS ?= PLATFORM=generic DEBUG=$(DEBUG) -j $(nproc)
 
 OPENSBI_OUT = $(OPENSBI_PATH)/install/usr/share/opensbi/lp64/generic/firmware/
 
@@ -137,7 +137,7 @@ OPTEE_OS_COMMON_FLAGS += CFG_TEE_CORE_LOG_LEVEL=4
 OPTEE_OS_COMMON_FLAGS += CFG_TEE_TA_LOG_LEVEL=4
 OPTEE_OS_COMMON_FLAGS += CFG_UNWIND=y
 
-OPTEE_OS_LOAD_ADDRESS ?= 0x8e000000
+OPTEE_OS_LOAD_ADDRESS ?= 0xf0c00000
 
 optee-os: optee-os-common
 	ln -sf $(OPTEE_OS_BIN) $(BINARIES_PATH)
@@ -153,9 +153,9 @@ run: all
 	$(MAKE) run-only
 
 QEMU_SMP 	?= 2
-QEMU_MEM 	?= 2048
+QEMU_MEM 	?= 4096
 QEMU_MACHINE	?= virt
-QEMU_DTB	?= -dtb qemu_rv64_virt_domain.dtb
+QEMU_DTB	?= qemu_rv64_virt_domain.dtb
 
 .PHONY: run-only
 run-only:
@@ -164,16 +164,16 @@ run-only:
 	$(call check-terminal)
 	$(call run-help)
 	cd $(BINARIES_PATH) && $(QEMU_BUILD)/qemu-system-riscv64 \
-		-nographic \
-		-serial tcp:127.0.0.1:64320,server \
-		-machine $(QEMU_MACHINE) \
-		-smp $(QEMU_SMP) \
-		-d unimp -semihosting-config enable=on,target=native \
-		-m $(QEMU_MEM) \
-		-bios fw_jump.bin \
-		-kernel Image \
-		$(QEMU_DTB) \
-		-append "rootwait root=/dev/vda ro" \
-		-drive file=rootfs.ext2,format=raw,id=hd0 \
-		-device virtio-blk-device,drive=hd0 \
-		-device loader,file=tee.bin,addr=$(OPTEE_OS_LOAD_ADDRESS)
+			-M $(QEMU_MACHINE) \
+			-dtb $(QEMU_DTB) \
+			-semihosting-config enable=on,target=native \
+			-m $(QEMU_MEM) \
+			-smp $(QEMU_SMP) \
+			-bios fw_jump.bin \
+			-kernel Image \
+			-device loader,file=tee.bin,addr=$(OPTEE_OS_LOAD_ADDRESS) \
+			-serial tcp:127.0.0.1:64320,server \
+			-append "rootwait root=/dev/vda ro" \
+			-drive file=rootfs.ext2,format=raw,id=hd0 \
+			-device virtio-blk-device,drive=hd0 \
+			-nographic -device virtio-net-pci,netdev=usernet -netdev user,id=usernet,hostfwd=tcp::9990-:22
