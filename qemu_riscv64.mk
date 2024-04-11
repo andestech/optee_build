@@ -40,6 +40,7 @@ DEBUG = 1
 # Paths to git projects and various binaries
 ################################################################################
 OPENSBI_PATH		?= $(ROOT)/opensbi
+U-BOOT_PATH		?= $(ROOT)/u-boot
 BINARIES_PATH		?= $(ROOT)/out/bin
 QEMU_PATH		?= $(ROOT)/qemu
 QEMU_BUILD		?= $(QEMU_PATH)/build
@@ -50,9 +51,9 @@ KERNEL_IMAGE		?= $(LINUX_PATH)/arch/riscv/boot/Image
 ################################################################################
 # Targets
 ################################################################################
-TARGET_DEPS := opensbi linux buildroot optee-os qemu
+TARGET_DEPS := opensbi linux buildroot optee-os qemu u-boot
 TARGET_CLEAN := opensbi-clean linux-clean buildroot-clean optee-os-clean \
-	qemu-clean
+	qemu-clean u-boot-clean
 
 TARGET_DEPS		+= $(KERNEL_IMAGE)
 
@@ -66,7 +67,7 @@ $(BINARIES_PATH):
 include toolchain.mk
 
 ################################################################################
-# openSBI
+# OpenSBI
 ################################################################################
 OPENSBI_EXPORTS ?= \
 	CROSS_COMPILE="$(CCACHE)$(RISCV64_CROSS_COMPILE)"
@@ -79,9 +80,42 @@ opensbi:
 	$(OPENSBI_EXPORTS) $(MAKE) -C $(OPENSBI_PATH) $(OPENSBI_FLAGS) install
 	mkdir -p $(BINARIES_PATH)
 	ln -sf $(OPENSBI_OUT)/fw_jump.bin $(BINARIES_PATH)
+	ln -sf $(OPENSBI_OUT)/fw_dynamic.bin $(BINARIES_PATH)
 
 opensbi-clean:
 	$(OPENSBI_EXPORTS) $(MAKE) -C $(OPENSBI_PATH) $(OPENSBI_FLAGS) clean
+
+################################################################################
+# Das U-Boot
+################################################################################
+U-BOOT_EXPORTS ?= \
+	CROSS_COMPILE="$(CCACHE)$(RISCV64_CROSS_COMPILE)"
+U-BOOT_DEFCONFIG_COMMON_FILES := \
+		$(U-BOOT_PATH)/configs/qemu-riscv64_spl_defconfig
+U-BOOT_ITB_LOAD_ADDR ?= 0x80200000
+U-BOOT_FLAGS ?= -j $(nproc)
+
+u-boot: u-boot-defconfig optee-os opensbi
+	mkdir -p $(BINARIES_PATH)
+	ln -sf $(BINARIES_PATH)/fw_dynamic.bin $(U-BOOT_PATH)
+	ln -sf $(BINARIES_PATH)/tee.bin $(U-BOOT_PATH)
+	$(U-BOOT_EXPORTS) $(MAKE) -C $(U-BOOT_PATH) all -j $(nproc)
+	$(U-BOOT_EXPORTS) $(MAKE) -C $(U-BOOT_PATH) tools
+	ln -sf $(U-BOOT_PATH)/spl/u-boot-spl $(BINARIES_PATH)
+	ln -sf $(U-BOOT_PATH)/u-boot.itb $(BINARIES_PATH)
+
+u-boot-clean: u-boot-defconfig-clean
+	$(U-BOOT_EXPORTS) $(MAKE) -C $(U-BOOT_PATH) clean
+
+u-boot-defconfig: $(U-BOOT_DEFCONFIG_COMMON_FILES)
+	cd $(U-BOOT_PATH) && \
+		ARCH=riscv \
+		scripts/kconfig/merge_config.sh $(U-BOOT_DEFCONFIG_COMMON_FILES)
+
+u-boot-defconfig-clean:
+	rm -f $(U-BOOT_PATH)/.config
+
+.PHONY: u-boot u-boot-clean u-boot-defconfig u-boot-defconfig-clean
 
 ################################################################################
 # QEMU
@@ -111,6 +145,7 @@ LINUX_COMMON_FLAGS += ARCH=riscv -j $(nproc)
 linux: linux-common
 	mkdir -p $(BINARIES_PATH)
 	ln -sf $(LINUX_PATH)/arch/riscv/boot/Image $(BINARIES_PATH)
+	ln -sf $(LINUX_PATH)/arch/riscv/boot/Image.gz $(BINARIES_PATH)
 
 linux-modules: linux
 	$(MAKE) -C $(LINUX_PATH) $(LINUX_COMMON_FLAGS) modules
@@ -137,7 +172,7 @@ OPTEE_OS_COMMON_FLAGS += CFG_TEE_CORE_LOG_LEVEL=4
 OPTEE_OS_COMMON_FLAGS += CFG_TEE_TA_LOG_LEVEL=4
 OPTEE_OS_COMMON_FLAGS += CFG_UNWIND=y
 
-OPTEE_OS_LOAD_ADDRESS ?= 0xf0c00000
+OPTEE_OS_LOAD_ADDRESS ?= 0xf1000000
 
 optee-os: optee-os-common
 	ln -sf $(OPTEE_OS_BIN) $(BINARIES_PATH)
