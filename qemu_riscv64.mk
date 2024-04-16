@@ -13,12 +13,15 @@ COMPILE_S_KERNEL ?= 64
 ################################################################################
 ARCH = riscv
 
-QEMU_VIRTFS_AUTOMOUNT = y
+BR2_ROOTFS_OVERLAY = $(ROOT)/build/br-ext/board/qemu_riscv64/overlay
 
-BR2_ROOTFS_OVERLAY = $(ROOT)/build/br-ext/board/qemu/overlay
-BR2_ROOTFS_POST_BUILD_SCRIPT = $(ROOT)/build/br-ext/board/qemu/post-build.sh
-BR2_ROOTFS_POST_SCRIPT_ARGS = "$(QEMU_VIRTFS_AUTOMOUNT) $(QEMU_VIRTFS_MOUNTPOINT) $(QEMU_PSS_AUTOMOUNT)"
-BR2_TARGET_GENERIC_GETTY_PORT = $(if $(CFG_NW_CONSOLE_UART),ttyS$(CFG_NW_CONSOLE_UART),ttyS0)
+BREXT_BOARD_PATH=$(ROOT)/build/br-ext/board/qemu_riscv64
+BREXT_GENIMAGE_CONFIG=$(BREXT_BOARD_PATH)/genimage.cfg
+
+BR2_PACKAGE_HOST_GENIMAGE=y
+BR2_ROOTFS_POST_IMAGE_SCRIPT="support/scripts/genimage.sh"
+BR2_ROOTFS_POST_SCRIPT_ARGS = "-c $(BREXT_GENIMAGE_CONFIG)"
+BR2_TARGET_GENERIC_GETTY_PORT = ttyS0
 BR2_TARGET_ROOTFS_EXT2 = y
 BR2_TOOLCHAIN_EXTERNAL_HEADERS_5_10 = y
 
@@ -142,10 +145,11 @@ linux-defconfig: $(LINUX_PATH)/.config
 
 LINUX_COMMON_FLAGS += ARCH=riscv -j $(nproc)
 
-linux: linux-common
+linux: linux-common buildroot
 	mkdir -p $(BINARIES_PATH)
 	ln -sf $(LINUX_PATH)/arch/riscv/boot/Image $(BINARIES_PATH)
 	ln -sf $(LINUX_PATH)/arch/riscv/boot/Image.gz $(BINARIES_PATH)
+	cp $(LINUX_PATH)/arch/riscv/boot/Image $(ROOT)/out-br/target/boot
 
 linux-modules: linux
 	$(MAKE) -C $(LINUX_PATH) $(LINUX_COMMON_FLAGS) modules
@@ -194,7 +198,7 @@ QEMU_DTB	?= qemu_rv64_virt_domain.dtb
 
 .PHONY: run-only
 run-only:
-	ln -sf $(ROOT)/out-br/images/rootfs.ext2 $(BINARIES_PATH)/
+	ln -sf $(ROOT)/out-br/images/sdcard.img $(BINARIES_PATH)/
 	ln -sf $(ROOT)/qemu_rv64_virt_domain.dtb $(BINARIES_PATH)/
 	$(call check-terminal)
 	$(call run-help)
@@ -208,7 +212,7 @@ run-only:
 			-serial tcp:127.0.0.1:64320,server \
 			-bios u-boot-spl \
 			-device loader,file=u-boot.itb,addr=$(U-BOOT_ITB_LOAD_ADDR) \
-			-drive file=rootfs.ext2,format=raw,id=hd0 \
 			-device virtio-blk-device,drive=hd0 \
+			-drive file=sdcard.img,id=hd0 \
 			-device virtio-net-pci,netdev=usernet \
 			-netdev user,id=usernet,hostfwd=tcp::2200-:22
